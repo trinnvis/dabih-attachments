@@ -20,12 +20,6 @@ const upload = multer({
 });
 
 const PORT = process.env.PORT || 3000;
-const S3_BUCKET = process.env.S3_BUCKET || 'dabihapi-attachments';
-const AWS_REGION = process.env.AWS_REGION || 'eu-central-1';
-
-// Configure AWS SDK
-const AWS = require('aws-sdk');
-AWS.config.update({ region: AWS_REGION });
 
 app.use(express.json());
 
@@ -270,7 +264,6 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`dabih-attachments service listening on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
-  console.log(`S3 Bucket: ${S3_BUCKET}`);
   console.log(`Max file size: ${process.env.MAX_FILE_SIZE || '52428800'} bytes`);
 
   // Verify LibreOffice
