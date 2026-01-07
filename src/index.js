@@ -2,7 +2,9 @@ const express = require('express');
 const multer = require('multer');
 const { execSync } = require('child_process');
 const { writeFileSync, readFileSync, unlinkSync } = require('fs');
-const { convertTo, canBeConvertedToPDF } = require('@shelf/aws-lambda-libreoffice');
+const libre = require('libreoffice-convert');
+const { promisify } = require('util');
+const libreConvertAsync = promisify(libre.convert);
 const isImage = require('is-image');
 const imgToPDF = require('image-to-pdf');
 const fs = require('fs');
@@ -69,9 +71,7 @@ async function scanFile(filePath) {
 // Convert file to PDF
 async function convertFileToPDF(sourceFile, fileName) {
   const tempname = (0 | Math.random() * 9e6).toString(36);
-  const fileExt = fileName.split('.').pop();
-
-  let destinationFile = `/tmp/libreoffice/${tempname}.pdf`;
+  const destinationFile = `/tmp/libreoffice/${tempname}.pdf`;
 
   if (isImage(fileName)) {
     console.log('Converting image to PDF');
@@ -79,19 +79,17 @@ async function convertFileToPDF(sourceFile, fileName) {
       imgToPDF([sourceFile], imgToPDF.sizes.A4),
       fs.createWriteStream(destinationFile)
     );
-  } else if (!canBeConvertedToPDF(fileName)) {
-    throw new Error(`File type not supported for conversion: ${fileName}`);
   } else {
     console.log('Converting document to PDF with LibreOffice');
 
-    // Copy to /tmp/libreoffice with proper name
-    const tempSourceFile = `/tmp/libreoffice/${tempname}.${fileExt}`;
-    fs.copyFileSync(sourceFile, tempSourceFile);
+    // Read source file
+    const docBuffer = readFileSync(sourceFile);
 
-    destinationFile = convertTo(tempname + '.' + fileExt, 'pdf');
+    // Convert to PDF
+    const pdfBuffer = await libreConvertAsync(docBuffer, '.pdf', undefined);
 
-    // Clean up temp source
-    unlinkSync(tempSourceFile);
+    // Write PDF to destination
+    writeFileSync(destinationFile, pdfBuffer);
   }
 
   return destinationFile;

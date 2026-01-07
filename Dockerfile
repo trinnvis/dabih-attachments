@@ -1,7 +1,7 @@
 # Multi-stage Dockerfile for dabih-attachments service
 # Includes LibreOffice for document conversion and ClamAV for malware scanning
 
-FROM node:18-bookworm AS base
+FROM node:22-bookworm AS base
 
 # Install LibreOffice and ClamAV
 RUN apt-get update && apt-get install -y \
