@@ -26,7 +26,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/convert/health', (req, res) => {
   res.status(200).json({
     status: 'healthy',
     service: 'dabih-attachments',
