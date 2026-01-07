@@ -35,6 +35,58 @@ app.get('/health', (req, res) => {
   });
 });
 
+// Get local test files (original and preview)
+app.get('/convert/:type/:filename', (req, res) => {
+  const { type, filename } = req.params;
+
+  // Validate type
+  if (type !== 'original' && type !== 'preview') {
+    return res.status(400).json({
+      status: 'error',
+      message: 'Invalid type. Must be "original" or "preview"'
+    });
+  }
+
+  // Check if file exists in memory store
+  const fileInfo = localFiles.get(filename);
+
+  if (!fileInfo) {
+    return res.status(404).json({
+      status: 'error',
+      message: 'File not found or expired (files expire after 5 minutes)'
+    });
+  }
+
+  // Check if expired
+  if (Date.now() > fileInfo.expiresAt) {
+    // Cleanup
+    try {
+      fs.unlinkSync(fileInfo.path);
+      localFiles.delete(filename);
+    } catch (e) {}
+
+    return res.status(404).json({
+      status: 'error',
+      message: 'File expired (files expire after 5 minutes)'
+    });
+  }
+
+  // Serve file
+  try {
+    res.setHeader('Content-Type', fileInfo.contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+
+    const fileStream = fs.createReadStream(fileInfo.path);
+    fileStream.pipe(res);
+  } catch (error) {
+    console.error('Error serving file:', error);
+    res.status(500).json({
+      status: 'error',
+      message: 'Error reading file'
+    });
+  }
+});
+
 // Antivirus scanning function
 async function scanFile(filePath) {
   try {
@@ -95,7 +147,57 @@ async function convertFileToPDF(sourceFile, fileName) {
   return destinationFile;
 }
 
-// Upload file using presigned URL
+// In-memory store for local test files (with 5 minute expiry)
+const localFiles = new Map();
+
+// Handle file upload - supports both presigned URLs and local test URLs
+async function handleFileUpload(url, filePath, contentType = 'application/octet-stream') {
+  // Check if this is a local test URL (starts with /convert/)
+  if (url.startsWith('/convert/')) {
+    console.log(`Storing file locally for test URL: ${url}`);
+
+    // Extract filename from URL (e.g., /convert/original/uuid.xxx -> uuid.xxx)
+    const filename = url.split('/').pop();
+    const localPath = `/tmp/convert-test/${filename}`;
+
+    // Ensure directory exists
+    const dir = '/tmp/convert-test';
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+
+    // Copy file to local storage
+    fs.copyFileSync(filePath, localPath);
+
+    // Store metadata with expiry (5 minutes)
+    const expiryTime = Date.now() + (5 * 60 * 1000);
+    localFiles.set(filename, {
+      path: localPath,
+      contentType: contentType,
+      expiresAt: expiryTime
+    });
+
+    // Schedule cleanup
+    setTimeout(() => {
+      if (localFiles.has(filename)) {
+        try {
+          fs.unlinkSync(localPath);
+          localFiles.delete(filename);
+          console.log(`Cleaned up expired test file: ${filename}`);
+        } catch (e) {
+          console.error(`Error cleaning up file ${filename}:`, e.message);
+        }
+      }
+    }, 5 * 60 * 1000);
+
+    return { success: true, local: true };
+  }
+
+  // Otherwise, treat as presigned URL
+  return uploadWithPresignedUrl(url, filePath, contentType);
+}
+
+// Upload file using presigned URL (S3)
 async function uploadWithPresignedUrl(presignedUrl, filePath, contentType = 'application/octet-stream') {
   return new Promise((resolve, reject) => {
     const fileContent = readFileSync(filePath);
@@ -184,8 +286,8 @@ app.post('/convert', upload.single('file'), async (req, res) => {
     console.log('Scan result: CLEAN');
 
     // STEP 2: Upload original file
-    console.log('Step 2: Uploading original file to S3...');
-    await uploadWithPresignedUrl(
+    console.log('Step 2: Uploading original file...');
+    await handleFileUpload(
       originalUrl,
       uploadedFile.path,
       uploadedFile.mimetype
@@ -199,8 +301,8 @@ app.post('/convert', upload.single('file'), async (req, res) => {
     console.log(`PDF generated: ${pdfFile}`);
 
     // STEP 4: Upload preview PDF
-    console.log('Step 4: Uploading preview PDF to S3...');
-    await uploadWithPresignedUrl(
+    console.log('Step 4: Uploading preview PDF...');
+    await handleFileUpload(
       previewUrl,
       pdfFile,
       'application/pdf'
