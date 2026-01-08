@@ -30,6 +30,6 @@ for i in {1..30}; do
     sleep 1
 done
 
-echo "Starting Node.js application as appuser..."
+echo "Starting Node.js application with TypeScript (tsx) as appuser..."
 cd /app
-exec gosu appuser node src/index.js
+exec gosu appuser tsx src/index.ts

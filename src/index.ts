@@ -1,17 +1,17 @@
-const express = require('express');
-const multer = require('multer');
-const { execSync } = require('child_process');
-const { writeFileSync, readFileSync, unlinkSync } = require('fs');
-const libre = require('libreoffice-convert');
-const { promisify } = require('util');
+import express, { Request, Response, NextFunction } from 'express';
+import multer from 'multer';
+import { execSync } from 'child_process';
+import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdirSync, copyFileSync, createReadStream, createWriteStream } from 'fs';
+import libre from 'libreoffice-convert';
+import { promisify } from 'util';
+import isImage from 'is-image';
+import imgToPDF from 'image-to-pdf';
+import { pipeline } from 'stream/promises';
+import https from 'https';
+import http from 'http';
+import { URL } from 'url';
+
 const libreConvertAsync = promisify(libre.convert);
-const isImage = require('is-image');
-const imgToPDF = require('image-to-pdf');
-const fs = require('fs');
-const { pipeline } = require('stream/promises');
-const https = require('https');
-const http = require('http');
-const { URL } = require('url');
 
 const app = express();
 const upload = multer({
@@ -26,7 +26,7 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json());
 
 // Health check endpoint
-app.get('/convert/health', (req, res) => {
+app.get('/convert/health', (req: Request, res: Response) => {
   res.status(200).json({
     status: 'healthy',
     service: 'dabih-attachments',
@@ -35,8 +35,17 @@ app.get('/convert/health', (req, res) => {
   });
 });
 
+interface LocalFileInfo {
+  path: string;
+  contentType: string;
+  expiresAt: number;
+}
+
+// In-memory store for local test files (with 5 minute expiry)
+const localFiles = new Map<string, LocalFileInfo>();
+
 // Get local test files (original and preview)
-app.get('/convert/:type/:filename', (req, res) => {
+app.get('/convert/:type/:filename', (req: Request, res: Response) => {
   const { type, filename } = req.params;
 
   // Validate type
@@ -61,7 +70,7 @@ app.get('/convert/:type/:filename', (req, res) => {
   if (Date.now() > fileInfo.expiresAt) {
     // Cleanup
     try {
-      fs.unlinkSync(fileInfo.path);
+      unlinkSync(fileInfo.path);
       localFiles.delete(filename);
     } catch (e) {}
 
@@ -76,7 +85,7 @@ app.get('/convert/:type/:filename', (req, res) => {
     res.setHeader('Content-Type', fileInfo.contentType);
     res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
 
-    const fileStream = fs.createReadStream(fileInfo.path);
+    const fileStream = createReadStream(fileInfo.path);
     fileStream.pipe(res);
   } catch (error) {
     console.error('Error serving file:', error);
@@ -87,8 +96,13 @@ app.get('/convert/:type/:filename', (req, res) => {
   }
 });
 
+interface ScanResult {
+  clean: boolean;
+  result: string;
+}
+
 // Antivirus scanning function
-async function scanFile(filePath) {
+async function scanFile(filePath: string): Promise<ScanResult> {
   try {
     console.log(`Scanning file: ${filePath}`);
 
@@ -104,7 +118,7 @@ async function scanFile(filePath) {
       clean: true,
       result: result.trim()
     };
-  } catch (error) {
+  } catch (error: any) {
     // clamdscan returns exit code 1 if virus found
     if (error.status === 1) {
       console.error('Malware detected:', error.stdout);
@@ -121,7 +135,7 @@ async function scanFile(filePath) {
 }
 
 // Convert file to PDF
-async function convertFileToPDF(sourceFile, fileName) {
+async function convertFileToPDF(sourceFile: string, fileName: string): Promise<string> {
   const tempname = (0 | Math.random() * 9e6).toString(36);
   const destinationFile = `/tmp/libreoffice/${tempname}.pdf`;
 
@@ -129,7 +143,7 @@ async function convertFileToPDF(sourceFile, fileName) {
     console.log('Converting image to PDF');
     await pipeline(
       imgToPDF([sourceFile], imgToPDF.sizes.A4),
-      fs.createWriteStream(destinationFile)
+      createWriteStream(destinationFile)
     );
   } else {
     console.log('Converting document to PDF with LibreOffice');
@@ -141,33 +155,36 @@ async function convertFileToPDF(sourceFile, fileName) {
     const pdfBuffer = await libreConvertAsync(docBuffer, '.pdf', undefined);
 
     // Write PDF to destination
-    writeFileSync(destinationFile, pdfBuffer);
+    writeFileSync(destinationFile, pdfBuffer as Buffer);
   }
 
   return destinationFile;
 }
 
-// In-memory store for local test files (with 5 minute expiry)
-const localFiles = new Map();
+interface UploadResult {
+  success: boolean;
+  local?: boolean;
+  statusCode?: number;
+}
 
 // Handle file upload - supports both presigned URLs and local test URLs
-async function handleFileUpload(url, filePath, contentType = 'application/octet-stream') {
+async function handleFileUpload(url: string, filePath: string, contentType = 'application/octet-stream'): Promise<UploadResult> {
   // Check if this is a local test URL (starts with /convert/)
   if (url.startsWith('/convert/')) {
     console.log(`Storing file locally for test URL: ${url}`);
 
     // Extract filename from URL (e.g., /convert/original/uuid.xxx -> uuid.xxx)
-    const filename = url.split('/').pop();
+    const filename = url.split('/').pop()!;
     const localPath = `/tmp/convert-test/${filename}`;
 
     // Ensure directory exists
     const dir = '/tmp/convert-test';
-    if (!fs.existsSync(dir)) {
-      fs.mkdirSync(dir, { recursive: true });
+    if (!existsSync(dir)) {
+      mkdirSync(dir, { recursive: true });
     }
 
     // Copy file to local storage
-    fs.copyFileSync(filePath, localPath);
+    copyFileSync(filePath, localPath);
 
     // Store metadata with expiry (5 minutes)
     const expiryTime = Date.now() + (5 * 60 * 1000);
@@ -181,10 +198,10 @@ async function handleFileUpload(url, filePath, contentType = 'application/octet-
     setTimeout(() => {
       if (localFiles.has(filename)) {
         try {
-          fs.unlinkSync(localPath);
+          unlinkSync(localPath);
           localFiles.delete(filename);
           console.log(`Cleaned up expired test file: ${filename}`);
-        } catch (e) {
+        } catch (e: any) {
           console.error(`Error cleaning up file ${filename}:`, e.message);
         }
       }
@@ -198,7 +215,7 @@ async function handleFileUpload(url, filePath, contentType = 'application/octet-
 }
 
 // Upload file using presigned URL (S3)
-async function uploadWithPresignedUrl(presignedUrl, filePath, contentType = 'application/octet-stream') {
+async function uploadWithPresignedUrl(presignedUrl: string, filePath: string, contentType = 'application/octet-stream'): Promise<UploadResult> {
   return new Promise((resolve, reject) => {
     const fileContent = readFileSync(filePath);
     const url = new URL(presignedUrl);
@@ -217,7 +234,7 @@ async function uploadWithPresignedUrl(presignedUrl, filePath, contentType = 'app
     const protocol = url.protocol === 'https:' ? https : http;
 
     const req = protocol.request(options, (res) => {
-      if (res.statusCode >= 200 && res.statusCode < 300) {
+      if (res.statusCode! >= 200 && res.statusCode! < 300) {
         console.log(`Upload successful: ${res.statusCode}`);
         resolve({ success: true, statusCode: res.statusCode });
       } else {
@@ -235,10 +252,10 @@ async function uploadWithPresignedUrl(presignedUrl, filePath, contentType = 'app
 }
 
 // Main conversion endpoint
-app.post('/convert', upload.single('file'), async (req, res) => {
+app.post('/convert', upload.single('file'), async (req: Request, res: Response) => {
   const startTime = Date.now();
-  let scanResult = null;
-  let tempFiles = [];
+  let scanResult: ScanResult | null = null;
+  let tempFiles: string[] = [];
 
   try {
     // Validate request
@@ -326,7 +343,7 @@ app.post('/convert', upload.single('file'), async (req, res) => {
       message: 'File processed successfully'
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error processing file:', error);
 
     // Clean up temp files
@@ -343,7 +360,7 @@ app.post('/convert', upload.single('file'), async (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
+app.use((err: any, req: Request, res: Response, next: NextFunction) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
       return res.status(413).json({
@@ -361,7 +378,7 @@ app.use((err, req, res, next) => {
 });
 
 // Start server
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`dabih-attachments service listening on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV}`);
   console.log(`Max file size: ${process.env.MAX_FILE_SIZE || '52428800'} bytes`);

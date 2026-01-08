@@ -1,11 +1,12 @@
 {
   "name": "dabih-attachments",
   "version": "1.0.0",
+  "type": "module",
   "description": "PDF conversion and antivirus scanning service for Dabih",
   "main": "src/index.js",
   "scripts": {
-    "start": "node src/index.js",
-    "dev": "nodemon src/index.js",
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [
@@ -22,10 +23,14 @@
     "multer": "^2.0.2",
     "image-to-pdf": "^3.0.2",
     "is-image": "^4.0.0",
-    "libreoffice-convert": "^1.7.0"
+    "libreoffice-convert": "^1.7.0",
+    "tsx": "^4.19.2"
   },
   "devDependencies": {
-    "nodemon": "^3.0.1"
+    "@types/express": "^5.0.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
   },
   "engines": {
     "node": ">=22.0.0"

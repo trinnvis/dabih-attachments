@@ -32,8 +32,9 @@ COPY package*.json ./
 # Install dependencies
 RUN npm ci --only=production
 
-# Copy application code
+# Copy application code and TypeScript config
 COPY src ./src
+COPY tsconfig.json ./
 
 # Configure ClamAV to run as non-root user
 RUN mkdir -p /var/run/clamav /var/log/clamav && \
