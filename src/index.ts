@@ -5,7 +5,7 @@ import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdirSync, copyFil
 import libre from 'libreoffice-convert';
 import { promisify } from 'util';
 import isImage from 'is-image';
-import imgToPDF from 'image-to-pdf';
+import imgToPDF, { sizes as pdfSizes } from 'image-to-pdf';
 import { pipeline } from 'stream/promises';
 import https from 'https';
 import http from 'http';
@@ -142,7 +142,7 @@ async function convertFileToPDF(sourceFile: string, fileName: string): Promise<s
   if (isImage(fileName)) {
     console.log('Converting image to PDF');
     await pipeline(
-      imgToPDF([sourceFile], imgToPDF.sizes.A4),
+      imgToPDF([sourceFile], pdfSizes.A4),
       createWriteStream(destinationFile)
     );
   } else {
