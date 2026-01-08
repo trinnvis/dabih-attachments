@@ -42,11 +42,11 @@ RUN mkdir -p /var/run/clamav /var/log/clamav && \
     sed -i 's/^User .*/User clamav/' /etc/clamav/clamd.conf && \
     sed -i 's/^LocalSocket .*/LocalSocket \/var\/run\/clamav\/clamd.ctl/' /etc/clamav/clamd.conf
 
-# Create non-root user for security
-RUN useradd -r -u 1001 -g daemon appuser && \
+# Create non-root user for security with home directory
+RUN useradd -r -u 1001 -m -d /home/appuser -g daemon appuser && \
     chown -R appuser:daemon /app && \
-    mkdir -p /tmp/libreoffice && \
-    chown -R appuser:daemon /tmp/libreoffice
+    mkdir -p /tmp/libreoffice /home/appuser/.cache /tmp/convert-test && \
+    chown -R appuser:daemon /tmp/libreoffice /home/appuser /tmp/convert-test
 
 # Copy and set up entrypoint script
 COPY docker-entrypoint.sh /usr/local/bin/

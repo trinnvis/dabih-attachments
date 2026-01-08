@@ -32,4 +32,4 @@ done
 
 echo "Starting Node.js application with TypeScript (tsx) as appuser..."
 cd /app
-exec gosu appuser tsx src/index.ts
+exec gosu appuser npx tsx src/index.ts
