@@ -22,8 +22,32 @@ const upload = multer({
 });
 
 const PORT = process.env.PORT || 3000;
+const API_KEY = process.env.ATTACHMENTS_CONVERT_API_KEY;
 
 app.use(express.json());
+
+// API Key validation middleware for POST requests
+function validateApiKey(req: Request, res: Response, next: NextFunction) {
+  const providedKey = req.headers['x-api-key'] || req.headers['authorization']?.replace('Bearer ', '');
+
+  if (!API_KEY) {
+    console.error('SECURITY WARNING: ATTACHMENTS_CONVERT_API_KEY environment variable not set');
+    return res.status(500).json({
+      status: 'error',
+      message: 'Service configuration error'
+    });
+  }
+
+  if (!providedKey || providedKey !== API_KEY) {
+    console.warn('Unauthorized access attempt');
+    return res.status(401).json({
+      status: 'error',
+      message: 'Unauthorized - Invalid or missing API key'
+    });
+  }
+
+  next();
+}
 
 // Health check endpoint
 app.get('/convert/health', (req: Request, res: Response) => {
@@ -251,8 +275,8 @@ async function uploadWithPresignedUrl(presignedUrl: string, filePath: string, co
   });
 }
 
-// Main conversion endpoint
-app.post('/convert', upload.single('file'), async (req: Request, res: Response) => {
+// Main conversion endpoint (with API key validation)
+app.post('/convert', validateApiKey, upload.single('file'), async (req: Request, res: Response) => {
   const startTime = Date.now();
   let scanResult: ScanResult | null = null;
   let tempFiles: string[] = [];
