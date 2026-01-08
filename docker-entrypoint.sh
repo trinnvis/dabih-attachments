@@ -1,13 +1,18 @@
 #!/bin/bash
 set -e
 
-echo "Starting ClamAV daemon..."
+echo "Starting ClamAV services..."
 
 # Ensure ClamAV directories exist with correct permissions
 mkdir -p /var/run/clamav /var/log/clamav
 chown -R clamav:clamav /var/run/clamav /var/log/clamav
 
+# Start freshclam daemon for automatic updates
+echo "Starting freshclam daemon..."
+freshclam -d &
+
 # Start ClamAV daemon in background
+echo "Starting clamd..."
 clamd &
 CLAMD_PID=$!
 
@@ -27,4 +32,4 @@ done
 
 echo "Starting Node.js application as appuser..."
 cd /app
-exec su-exec appuser node src/index.js
+exec gosu appuser node src/index.js

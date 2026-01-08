@@ -3,7 +3,7 @@
 
 FROM node:22-bookworm AS base
 
-# Install LibreOffice, ClamAV and su-exec
+# Install LibreOffice, ClamAV and gosu
 RUN apt-get update && apt-get install -y \
     libreoffice-writer \
     libreoffice-calc \
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y \
     clamav \
     clamav-daemon \
     clamav-freshclam \
-    su-exec \
+    gosu \
     && rm -rf /var/lib/apt/lists/*
 
 # Update ClamAV virus definitions
