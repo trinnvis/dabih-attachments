@@ -6,9 +6,11 @@ PDF conversion and antivirus scanning service for Dabih.
 
 This service provides secure document conversion and malware scanning capabilities:
 
-- **Document to PDF conversion** using LibreOffice (supports DOCX, XLSX, PPTX, ODT, etc.)
-- **Image to PDF conversion** for JPG, PNG, GIF, BMP, TIFF
+- **Document to PDF conversion** using LibreOffice (DOCX, XLSX, PPTX, ODT, etc.)
+- **Image to PDF conversion** using Sharp (JPG, PNG, WebP, GIF, TIFF, HEIC, AVIF, SVG)
+- **Placeholder PDF generation** for unsupported formats (video, audio, archives)
 - **Antivirus scanning** using ClamAV before storing files
+- **File type whitelist** - blocks executable and script files
 - **Presigned URL-based security** - service writes only to specific S3 objects
 
 ## Security Architecture
@@ -48,7 +50,10 @@ Convert and scan a document.
   "status": "success",
   "scanResult": "clean",
   "originalUploaded": true,
-  "previewGenerated": true
+  "previewGenerated": true,
+  "fileCategory": "image",
+  "processingTime": 1234,
+  "message": "File processed successfully"
 }
 ```
 
@@ -57,7 +62,17 @@ Convert and scan a document.
 {
   "status": "rejected",
   "scanResult": "infected",
-  "details": "Malware detected: Win.Test.EICAR_HDB-1"
+  "details": "Malware detected: Win.Test.EICAR_HDB-1",
+  "message": "File rejected due to malware detection"
+}
+```
+
+**Response (Blocked File Type):**
+```json
+{
+  "status": "error",
+  "message": "File type not allowed: .exe",
+  "fileType": "blocked"
 }
 ```
 
@@ -74,8 +89,10 @@ Health check endpoint.
 - Exposed at `https://api.trinnvis.io/convert`
 
 **Container:**
-- Node.js 18+ runtime
+- Node.js 22+ runtime
 - LibreOffice 7.x for document conversion
+- Sharp for image processing
+- PDFKit for placeholder PDF generation
 - ClamAV with daily signature updates
 
 **IAM Permissions:**
@@ -87,7 +104,7 @@ Health check endpoint.
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 22+
 - Docker (for LibreOffice and ClamAV)
 
 ### Setup
@@ -115,21 +132,45 @@ docker run -p 3000:3000 -e S3_BUCKET=test-bucket dabih-attachments
 
 ## Supported File Types
 
-**Documents (LibreOffice):**
+### Convertible to PDF Preview
+
+**Documents (via LibreOffice):**
 - Microsoft Office: DOCX, XLSX, PPTX, DOC, XLS, PPT
 - OpenDocument: ODT, ODS, ODP
 - Other: RTF, TXT, CSV
 
-**Images:**
-- JPG, JPEG, PNG, GIF, BMP, TIFF
+**Images (via Sharp):**
+- Common formats: JPG, JPEG, PNG, WebP, GIF, TIFF
+- Modern formats: AVIF, HEIC, HEIF (iPhone photos)
+- Vector: SVG (rasterized)
+
+### Supported with Placeholder Preview
+
+The following file types are accepted and virus-scanned. The original file is stored, but a placeholder PDF is generated for preview:
+
+**Video:**
+- MP4, AVI, MOV, MKV, WebM, FLV, WMV, M4V
+
+**Audio:**
+- MP3, WAV, OGG, FLAC, M4A, AAC, WMA
+
+**Archives:**
+- ZIP, RAR, 7Z, TAR, GZ, BZ2
+
+### Blocked File Types
+
+For security reasons, executable and script files are not accepted:
+- Executables: EXE, DLL, COM, SCR, PIF, MSI
+- Scripts: BAT, CMD, VBS, JS, PS1, SH, BASH
+- Installers: APP, DEB, RPM, JAR
 
 ## Security Considerations
 
 ### Input Validation
 - File size limit: 50MB
-- Extension whitelist
-- Magic number verification
-- Malware scanning (ClamAV)
+- File type whitelist (blocks executables and scripts)
+- Extension-based categorization
+- Malware scanning (ClamAV) before any storage
 
 ### Resource Limits
 - Conversion timeout: 120 seconds
@@ -191,7 +232,10 @@ aws ecs update-service \
 
 ## Future Work
 
-- [ ] Add support for additional file formats
+- [x] Add support for additional image formats (HEIC, WebP, AVIF, etc.) ✓
+- [x] Implement placeholder PDF for unsupported formats ✓
+- [x] Add file type whitelist for security ✓
+- [ ] Special UI handling for video/audio files in client
 - [ ] Implement preview caching
 - [ ] Add metrics dashboard
 - [ ] Consider sandboxed LibreOffice execution (gVisor/Firecracker)

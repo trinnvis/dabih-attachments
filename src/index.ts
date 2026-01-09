@@ -4,14 +4,58 @@ import { execSync } from 'child_process';
 import { writeFileSync, readFileSync, unlinkSync, existsSync, mkdirSync, copyFileSync, createReadStream, createWriteStream } from 'fs';
 import libre from 'libreoffice-convert';
 import { promisify } from 'util';
-import isImage from 'is-image';
-import imgToPDF, { sizes as pdfSizes } from 'image-to-pdf';
+import sharp from 'sharp';
+import PDFDocument from 'pdfkit';
 import { pipeline } from 'stream/promises';
 import https from 'https';
 import http from 'http';
 import { URL } from 'url';
+import path from 'path';
 
 const libreConvertAsync = promisify(libre.convert);
+
+// File type categorization
+const FILE_TYPES = {
+  // Images - supported by Sharp
+  image: new Set([
+    'jpg', 'jpeg', 'png', 'webp', 'gif', 'tiff', 'tif',
+    'avif', 'heic', 'heif', 'svg'
+  ]),
+
+  // Documents - supported by LibreOffice
+  document: new Set([
+    'doc', 'docx', 'odt', 'rtf', 'txt',
+    'xls', 'xlsx', 'ods', 'csv',
+    'ppt', 'pptx', 'odp'
+  ]),
+
+  // Video/Audio - not convertible, will get placeholder
+  video: new Set(['mp4', 'avi', 'mov', 'mkv', 'webm', 'flv', 'wmv', 'm4v']),
+  audio: new Set(['mp3', 'wav', 'ogg', 'flac', 'm4a', 'aac', 'wma']),
+
+  // Archives - not convertible, will get placeholder
+  archive: new Set(['zip', 'rar', '7z', 'tar', 'gz', 'bz2']),
+
+  // Blocked - dangerous file types
+  blocked: new Set([
+    'exe', 'dll', 'bat', 'cmd', 'com', 'scr', 'pif',
+    'vbs', 'js', 'jar', 'app', 'deb', 'rpm', 'msi',
+    'sh', 'bash', 'ps1'
+  ])
+};
+
+function getFileCategory(filename: string): 'image' | 'document' | 'video' | 'audio' | 'archive' | 'blocked' | 'unsupported' {
+  const ext = path.extname(filename).slice(1).toLowerCase();
+
+  if (FILE_TYPES.blocked.has(ext)) return 'blocked';
+  if (FILE_TYPES.image.has(ext)) return 'image';
+  if (FILE_TYPES.document.has(ext)) return 'document';
+  if (FILE_TYPES.video.has(ext)) return 'video';
+  if (FILE_TYPES.audio.has(ext)) return 'audio';
+  if (FILE_TYPES.archive.has(ext)) return 'archive';
+
+  return 'unsupported';
+}
 
 const app = express();
 const upload = multer({
@@ -158,28 +202,131 @@ async function scanFile(filePath: string): Promise<ScanResult> {
   }
 }
 
-// Convert file to PDF
-async function convertFileToPDF(sourceFile: string, fileName: string): Promise<string> {
+// Generate placeholder PDF for unsupported file types
+async function generatePlaceholderPDF(fileName: string, fileSize: number, category: string): Promise<string> {
   const tempname = (0 | Math.random() * 9e6).toString(36);
   const destinationFile = `/tmp/libreoffice/${tempname}.pdf`;
 
-  if (isImage(fileName)) {
-    console.log('Converting image to PDF');
-    await pipeline(
-      imgToPDF([sourceFile], pdfSizes.A4),
-      createWriteStream(destinationFile)
-    );
-  } else {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    const stream = createWriteStream(destinationFile);
+
+    doc.pipe(stream);
+
+    // Title
+    doc.fontSize(24)
+       .fillColor('#333')
+       .text('Forhåndsvisning ikke tilgjengelig', { align: 'center' });
+
+    doc.moveDown(2);
+
+    // Icon/Box
+    doc.fontSize(48)
+       .fillColor('#999')
+       .text('📄', { align: 'center' });
+
+    doc.moveDown(2);
+
+    // File info
+    doc.fontSize(14)
+       .fillColor('#666')
+       .text('Filnavn:', { continued: false })
+       .fillColor('#333')
+       .text(fileName, { align: 'center' });
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(14)
+       .fillColor('#666')
+       .text('Filtype:', { continued: false })
+       .fillColor('#333')
+       .text(category.toUpperCase(), { align: 'center' });
+
+    doc.moveDown(0.5);
+
+    doc.fontSize(14)
+       .fillColor('#666')
+       .text('Størrelse:', { continued: false })
+       .fillColor('#333')
+       .text(`${(fileSize / 1024 / 1024).toFixed(2)} MB`, { align: 'center' });
+
+    doc.moveDown(3);
+
+    // Message
+    doc.fontSize(12)
+       .fillColor('#666')
+       .text('Denne filtypen kan ikke forhåndsvises.', { align: 'center' })
+       .text('Last ned originalfilen for å se innholdet.', { align: 'center' });
+
+    doc.end();
+
+    stream.on('finish', () => resolve(destinationFile));
+    stream.on('error', reject);
+  });
+}
+
+// Convert file to PDF
+async function convertFileToPDF(sourceFile: string, fileName: string, fileSize: number): Promise<string> {
+  const tempname = (0 | Math.random() * 9e6).toString(36);
+  const destinationFile = `/tmp/libreoffice/${tempname}.pdf`;
+  const category = getFileCategory(fileName);
+
+  // Check if file type is blocked
+  if (category === 'blocked') {
+    throw new Error(`File type not allowed: ${path.extname(fileName)}`);
+  }
+
+  // Handle based on category
+  if (category === 'image') {
+    console.log('Converting image to PDF with Sharp');
+
+    try {
+      // Convert image to JPEG buffer first (normalized format)
+      const imageBuffer = await sharp(sourceFile)
+        .jpeg({ quality: 90 })
+        .toBuffer();
+
+      // Get image metadata for sizing
+      const metadata = await sharp(imageBuffer).metadata();
+      const width = metadata.width || 595;
+      const height = metadata.height || 842;
+
+      // Create PDF with image
+      const doc = new PDFDocument({
+        size: [width, height],
+        margins: { top: 0, bottom: 0, left: 0, right: 0 }
+      });
+
+      const stream = createWriteStream(destinationFile);
+      doc.pipe(stream);
+      doc.image(imageBuffer, 0, 0, { width, height });
+      doc.end();
+
+      await new Promise<void>((resolve, reject) => {
+        stream.on('finish', () => resolve());
+        stream.on('error', reject);
+      });
+    } catch (error) {
+      console.warn(`Sharp conversion failed for ${fileName}, creating placeholder:`, error);
+      return generatePlaceholderPDF(fileName, fileSize, 'image (conversion failed)');
+    }
+
+  } else if (category === 'document') {
     console.log('Converting document to PDF with LibreOffice');
 
-    // Read source file
-    const docBuffer = readFileSync(sourceFile);
+    try {
+      const docBuffer = readFileSync(sourceFile);
+      const pdfBuffer = await libreConvertAsync(docBuffer, '.pdf', undefined);
+      writeFileSync(destinationFile, pdfBuffer as Buffer);
+    } catch (error) {
+      console.warn(`LibreOffice conversion failed for ${fileName}, creating placeholder:`, error);
+      return generatePlaceholderPDF(fileName, fileSize, 'document (conversion failed)');
+    }
 
-    // Convert to PDF
-    const pdfBuffer = await libreConvertAsync(docBuffer, '.pdf', undefined);
-
-    // Write PDF to destination
-    writeFileSync(destinationFile, pdfBuffer as Buffer);
+  } else {
+    // Video, audio, archive, or unsupported - create placeholder
+    console.log(`Creating placeholder PDF for ${category} file: ${fileName}`);
+    return generatePlaceholderPDF(fileName, fileSize, category);
   }
 
   return destinationFile;
@@ -304,6 +451,21 @@ app.post('/convert', validateApiKey, upload.single('file'), async (req: Request,
 
     console.log(`Processing file: ${uploadedFile.originalname} (${uploadedFile.size} bytes)`);
 
+    // Check file type
+    const fileCategory = getFileCategory(uploadedFile.originalname);
+    if (fileCategory === 'blocked') {
+      // Clean up immediately
+      tempFiles.forEach(file => {
+        try { unlinkSync(file); } catch (e) {}
+      });
+
+      return res.status(400).json({
+        status: 'error',
+        message: `File type not allowed: ${path.extname(uploadedFile.originalname)}`,
+        fileType: fileCategory
+      });
+    }
+
     // STEP 1: ANTIVIRUS SCAN (BEFORE any S3 upload)
     console.log('Step 1: Scanning for malware...');
     scanResult = await scanFile(uploadedFile.path);
@@ -337,7 +499,7 @@ app.post('/convert', validateApiKey, upload.single('file'), async (req: Request,
 
     // STEP 3: Convert to PDF
     console.log('Step 3: Converting to PDF...');
-    const pdfFile = await convertFileToPDF(uploadedFile.path, uploadedFile.originalname);
+    const pdfFile = await convertFileToPDF(uploadedFile.path, uploadedFile.originalname, uploadedFile.size);
     tempFiles.push(pdfFile);
     console.log(`PDF generated: ${pdfFile}`);
 
@@ -363,6 +525,7 @@ app.post('/convert', validateApiKey, upload.single('file'), async (req: Request,
       scanResult: 'clean',
       originalUploaded: true,
       previewGenerated: true,
+      fileCategory: fileCategory,
       processingTime: duration,
       message: 'File processed successfully'
     });
