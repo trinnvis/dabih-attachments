@@ -5,11 +5,12 @@ import { createReadStream, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import net from 'net';
 import os from 'os';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const repoRoot = path.resolve(__dirname, '../../..');
+const repoRootArg = process.argv[2];
+if (!repoRootArg) {
+  throw new Error('Missing repo root argument. Usage: tsx src/test/e2e/e2e-convert.ts /path/to/repo');
+}
+const repoRoot = path.resolve(repoRootArg);
 
 const imageTag = 'dabih-attachments-e2e';
 const containerName = `dabih-attachments-e2e-${Date.now()}`;
