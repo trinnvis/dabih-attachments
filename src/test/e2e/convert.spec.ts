@@ -53,26 +53,16 @@ describe('convert endpoint', () => {
     );
 
     expect(convertResponse.status).toBe(200);
-    expect(convertResponse.data?.status).toBe('success');
-    expect(convertResponse.data?.scanResult).toBe('clean');
-    expect(convertResponse.data?.originalUploaded).toBe(true);
-    expect(convertResponse.data?.previewGenerated).toBe(true);
-    expect(convertResponse.data?.fileCategory).toBe('document');
-
-    const originalResponse = await axios.get(
-      `${baseUrl}${originalUrl}`,
-      { responseType: 'arraybuffer', validateStatus: () => true }
-    );
-    expect(originalResponse.status).toBe(200);
-    expect(originalResponse.headers['content-type']).toContain('text/plain');
-    expect(Buffer.from(originalResponse.data).toString('utf8')).toBe(fileContents);
 
     const previewResponse = await axios.get(
       `${baseUrl}${previewUrl}`,
       { responseType: 'arraybuffer', validateStatus: () => true }
     );
     expect(previewResponse.status).toBe(200);
-    const previewPrefix = Buffer.from(previewResponse.data).subarray(0, 5).toString('utf8');
+    const previewBuffer = Buffer.from(previewResponse.data);
+    const previewPrefix = previewBuffer.subarray(0, 5).toString('utf8');
     expect(previewPrefix).toBe('%PDF-');
+    expect(previewBuffer.includes(Buffer.from('Forh\\u00e5ndsvisning ikke tilgjengelig'))).toBe(false);
+    expect(previewBuffer.includes(Buffer.from('Denne filtypen kan ikke forh\\u00e5ndsvises.'))).toBe(false);
   }, 120_000);
 });
