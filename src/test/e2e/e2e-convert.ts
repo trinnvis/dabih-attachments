@@ -1,6 +1,6 @@
-import axios from 'axios';
+import axios, { type AxiosResponse } from 'axios';
 import FormData from 'form-data';
-import { spawnSync } from 'child_process';
+import { spawnSync, type SpawnSyncOptions } from 'child_process';
 import { createReadStream, mkdtempSync, rmSync, writeFileSync } from 'fs';
 import net from 'net';
 import os from 'os';
@@ -18,23 +18,23 @@ const apiKey = `e2e-${Math.random().toString(36).slice(2)}`;
 const host = '127.0.0.1';
 const port = 3001;
 
-function run(command, args, options = {}) {
+function run(command: string, args: string[], options: SpawnSyncOptions = {}): void {
   const result = spawnSync(command, args, { stdio: 'inherit', ...options });
   if (result.status !== 0) {
     throw new Error(`Command failed: ${command} ${args.join(' ')}`);
   }
 }
 
-function assert(condition, message) {
+function assert(condition: unknown, message: string): asserts condition {
   if (!condition) {
     throw new Error(message);
   }
 }
 
-async function waitForPort(hostname, portNumber, timeoutMs) {
+async function waitForPort(hostname: string, portNumber: number, timeoutMs: number): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
-    const connected = await new Promise((resolve) => {
+    const connected = await new Promise<boolean>((resolve) => {
       const socket = net.connect({ host: hostname, port: portNumber }, () => {
         socket.end();
         resolve(true);
@@ -51,7 +51,7 @@ async function waitForPort(hostname, portNumber, timeoutMs) {
   throw new Error(`Timed out waiting for ${hostname}:${portNumber}`);
 }
 
-async function waitForHealth(baseUrl, timeoutMs) {
+async function waitForHealth(baseUrl: string, timeoutMs: number): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -69,7 +69,7 @@ async function waitForHealth(baseUrl, timeoutMs) {
   throw new Error('Timed out waiting for /convert/health');
 }
 
-async function waitForClamSocket(container, timeoutMs) {
+async function waitForClamSocket(container: string, timeoutMs: number): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     try {
@@ -89,7 +89,15 @@ async function waitForClamSocket(container, timeoutMs) {
   throw new Error('Timed out waiting for ClamAV socket');
 }
 
-async function main() {
+interface ConvertResponse {
+  status: string;
+  scanResult: string;
+  originalUploaded: boolean;
+  previewGenerated: boolean;
+  fileCategory: string;
+}
+
+async function main(): Promise<void> {
   const tempDir = mkdtempSync(path.join(os.tmpdir(), 'dabih-attachments-e2e-'));
   const fileName = 'test.txt';
   const filePath = path.join(tempDir, fileName);
@@ -131,7 +139,7 @@ async function main() {
     form.append('originalUrl', originalUrl);
     form.append('previewUrl', previewUrl);
 
-    let convertResponse;
+    let convertResponse: AxiosResponse<ConvertResponse> | undefined;
     for (let attempt = 1; attempt <= 5; attempt += 1) {
       try {
         convertResponse = await axios.post(
@@ -148,7 +156,7 @@ async function main() {
           }
         );
         break;
-      } catch (error) {
+      } catch (error: unknown) {
         if (attempt === 5) {
           throw error;
         }
@@ -193,25 +201,25 @@ async function main() {
     assert(previewPrefix === '%PDF-', 'Preview does not look like a PDF');
 
     console.log('E2E conversion test passed.');
-  } catch (error) {
+  } catch (error: unknown) {
     failed = true;
     throw error;
   } finally {
     if (failed) {
       try {
         run('docker', ['logs', containerName]);
-      } catch (error) {}
+      } catch (error: unknown) {}
     }
     try {
       run('docker', ['rm', '-f', containerName]);
-    } catch (error) {}
+    } catch (error: unknown) {}
     try {
       rmSync(tempDir, { recursive: true, force: true });
-    } catch (error) {}
+    } catch (error: unknown) {}
   }
 }
 
-main().catch((error) => {
+main().catch((error: unknown) => {
   console.error(error);
   process.exitCode = 1;
 }).finally(() => {
