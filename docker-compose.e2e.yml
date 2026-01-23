@@ -1,0 +1,16 @@
+services:
+  attachments:
+    build: .
+    environment:
+      ATTACHMENTS_CONVERT_API_KEY: e2e-test-key
+    expose:
+      - "3000"
+  e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    environment:
+      E2E_BASE_URL: http://attachments:3000
+      E2E_API_KEY: e2e-test-key
+    depends_on:
+      - attachments

@@ -1,0 +1,11 @@
+FROM node:22-bookworm
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY tsconfig.json ./
+COPY src/test/e2e/convert.spec.ts ./src/test/e2e/convert.spec.ts
+
+RUN npm ci
+
+CMD ["npm", "run", "test:e2e"]

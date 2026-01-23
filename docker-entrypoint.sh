@@ -19,7 +19,7 @@ CLAMD_PID=$!
 # Wait for ClamAV to be ready
 echo "Waiting for ClamAV daemon to start..."
 for i in {1..30}; do
-    if clamdscan --version > /dev/null 2>&1; then
+    if [ -S /var/run/clamav/clamd.ctl ]; then
         echo "ClamAV daemon is ready (PID: $CLAMD_PID)"
         break
     fi
