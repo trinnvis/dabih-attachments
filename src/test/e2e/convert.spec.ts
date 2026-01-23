@@ -8,29 +8,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 const baseUrl = process.env.E2E_BASE_URL || 'http://localhost:3000';
 const apiKey = process.env.E2E_API_KEY || 'e2e-test-key';
 
-async function waitForHealth(timeoutMs: number): Promise<void> {
-  const start = Date.now();
-  while (Date.now() - start < timeoutMs) {
-    try {
-      const response = await axios.get(`${baseUrl}/convert/health`, {
-        validateStatus: () => true
-      });
-      if (response.status === 200) {
-        return;
-      }
-    } catch {
-      // Ignore and retry.
-    }
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  }
-  throw new Error(`Timed out waiting for ${baseUrl}/convert/health`);
-}
-
 describe('convert endpoint', () => {
   let tempDir = '';
 
   beforeAll(async () => {
-    await waitForHealth(120_000);
     tempDir = mkdtempSync(path.join(os.tmpdir(), 'dabih-attachments-e2e-'));
   }, 180_000);
 
