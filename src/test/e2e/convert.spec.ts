@@ -65,4 +65,43 @@ describe('convert endpoint', () => {
     expect(previewBuffer.includes(Buffer.from('Forh\\u00e5ndsvisning ikke tilgjengelig'))).toBe(false);
     expect(previewBuffer.includes(Buffer.from('Denne filtypen kan ikke forh\\u00e5ndsvises.'))).toBe(false);
   }, 120_000);
+
+  it('rejects blocked executables and does not store originals', async () => {
+    const fileName = 'blocked.exe';
+    const filePath = path.join(tempDir, fileName);
+    writeFileSync(filePath, 'MZ', 'utf8');
+
+    const originalUrl = `/convert/original/${fileName}`;
+    const previewUrl = '/convert/preview/blocked.pdf';
+
+    const form = new FormData();
+    form.append('file', createReadStream(filePath), {
+      filename: fileName,
+      contentType: 'application/octet-stream'
+    });
+    form.append('originalUrl', originalUrl);
+    form.append('previewUrl', previewUrl);
+
+    const convertResponse = await axios.post(
+      `${baseUrl}/convert`,
+      form,
+      {
+        headers: {
+          ...form.getHeaders(),
+          'x-api-key': apiKey
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        validateStatus: () => true
+      }
+    );
+
+    expect(convertResponse.status).toBe(400);
+
+    const originalResponse = await axios.get(
+      `${baseUrl}${originalUrl}`,
+      { responseType: 'arraybuffer', validateStatus: () => true }
+    );
+    expect(originalResponse.status).toBe(404);
+  }, 60_000);
 });
