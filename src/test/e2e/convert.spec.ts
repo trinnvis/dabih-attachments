@@ -66,7 +66,7 @@ describe('convert endpoint', () => {
     expect(previewBuffer.includes(Buffer.from('Denne filtypen kan ikke forh\\u00e5ndsvises.'))).toBe(false);
   }, 120_000);
 
-  it('rejects blocked executables and does not store originals', async () => {
+  it('rejects disallowed file type', async () => {
     const fileName = 'blocked.exe';
     const filePath = path.join(tempDir, fileName);
     writeFileSync(filePath, 'MZ', 'utf8');
@@ -97,6 +97,46 @@ describe('convert endpoint', () => {
     );
 
     expect(convertResponse.status).toBe(400);
+
+    const originalResponse = await axios.get(
+      `${baseUrl}${originalUrl}`,
+      { responseType: 'arraybuffer', validateStatus: () => true }
+    );
+    expect(originalResponse.status).toBe(404);
+  }, 60_000);
+
+  it('rejects malicious file of allowed type', async () => {
+    const fileName = 'eicar.txt';
+    const filePath = path.join(tempDir, fileName);
+    const eicar = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*';
+    writeFileSync(filePath, eicar, 'utf8');
+
+    const originalUrl = `/convert/original/${fileName}`;
+    const previewUrl = '/convert/preview/eicar.pdf';
+
+    const form = new FormData();
+    form.append('file', createReadStream(filePath), {
+      filename: fileName,
+      contentType: 'text/plain'
+    });
+    form.append('originalUrl', originalUrl);
+    form.append('previewUrl', previewUrl);
+
+    const convertResponse = await axios.post(
+      `${baseUrl}/convert`,
+      form,
+      {
+        headers: {
+          ...form.getHeaders(),
+          'x-api-key': apiKey
+        },
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        validateStatus: () => true
+      }
+    );
+
+    expect(convertResponse.status).toBe(403);
 
     const originalResponse = await axios.get(
       `${baseUrl}${originalUrl}`,
