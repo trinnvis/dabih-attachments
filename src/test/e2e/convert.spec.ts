@@ -13,7 +13,7 @@ describe('convert endpoint', () => {
 
   beforeAll(async () => {
     tempDir = mkdtempSync(path.join(os.tmpdir(), 'dabih-attachments-e2e-'));
-  }, 180_000);
+  }, 1_000);
 
   afterAll(() => {
     if (tempDir) {
@@ -64,7 +64,7 @@ describe('convert endpoint', () => {
     expect(previewPrefix).toBe('%PDF-');
     expect(previewBuffer.includes(Buffer.from('Forh\\u00e5ndsvisning ikke tilgjengelig'))).toBe(false);
     expect(previewBuffer.includes(Buffer.from('Denne filtypen kan ikke forh\\u00e5ndsvises.'))).toBe(false);
-  }, 120_000);
+  }, 1_000);
 
   it('rejects disallowed file type', async () => {
     const fileName = 'blocked.exe';
@@ -103,7 +103,7 @@ describe('convert endpoint', () => {
       { responseType: 'arraybuffer', validateStatus: () => true }
     );
     expect(originalResponse.status).toBe(404);
-  }, 60_000);
+  }, 1_000);
 
   it('rejects malicious file of allowed type', async () => {
     const fileName = 'eicar.txt';
@@ -143,5 +143,5 @@ describe('convert endpoint', () => {
       { responseType: 'arraybuffer', validateStatus: () => true }
     );
     expect(originalResponse.status).toBe(404);
-  }, 60_000);
+  }, 1_000);
 });
