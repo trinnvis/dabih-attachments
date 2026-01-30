@@ -39,8 +39,11 @@ COPY tsconfig.json ./
 # Configure ClamAV to run as non-root user
 RUN mkdir -p /var/run/clamav /var/log/clamav && \
     chown -R clamav:clamav /var/run/clamav /var/log/clamav && \
+    chmod 775 /var/run/clamav /var/log/clamav && \
     sed -i 's/^User .*/User clamav/' /etc/clamav/clamd.conf && \
-    sed -i 's/^LocalSocket .*/LocalSocket \/var\/run\/clamav\/clamd.ctl/' /etc/clamav/clamd.conf
+    sed -i 's/^LocalSocket .*/LocalSocket \/var\/run\/clamav\/clamd.ctl/' /etc/clamav/clamd.conf && \
+    sed -i 's/^LocalSocketMode .*/LocalSocketMode 666/' /etc/clamav/clamd.conf || \
+    echo "LocalSocketMode 666" >> /etc/clamav/clamd.conf
 
 # Create non-root user for security with home directory
 RUN useradd -r -u 1001 -m -d /home/appuser -g daemon appuser && \
