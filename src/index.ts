@@ -431,6 +431,10 @@ app.post('/convert', validateApiKey, upload.single('file'), async (req: Request,
   try {
     // Validate request
     if (!req.file) {
+      console.error('No file uploaded to /convert', {
+        bodyKeys: Object.keys(req.body || {}),
+        contentType: req.headers['content-type']
+      });
       return res.status(400).json({
         status: 'error',
         message: 'No file uploaded'
