@@ -7,7 +7,9 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "dev": "tsx watch src/index.ts",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "test:e2e": "vitest run src/test/e2e/convert.spec.ts",
+    "test:e2e:docker": "docker compose -f docker-compose.e2e.yml up --build --abort-on-container-exit --exit-code-from e2e --remove-orphans"
   },
   "keywords": [
     "pdf",
@@ -31,7 +33,10 @@
     "@types/multer": "^1.4.12",
     "@types/node": "^22.10.5",
     "@types/pdfkit": "^0.17.4",
-    "typescript": "^5.7.3"
+    "axios": "^1.13.2",
+    "form-data": "^4.0.5",
+    "typescript": "^5.7.3",
+    "vitest": "^4.0.18"
   },
   "engines": {
     "node": ">=22.0.0"

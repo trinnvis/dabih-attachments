@@ -1,0 +1,22 @@
+services:
+  attachments:
+    build: .
+    environment:
+      ATTACHMENTS_CONVERT_API_KEY: e2e-test-key
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:3000/convert/health', r => process.exit(r.statusCode === 200 ? 0 : 1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+  e2e:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    environment:
+      E2E_BASE_URL: http://attachments:3000
+      E2E_API_KEY: e2e-test-key
+    depends_on:
+      attachments:
+        condition: service_healthy
