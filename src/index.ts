@@ -16,6 +16,9 @@ const libreConvertAsync = promisify(libre.convert);
 
 // File type categorization
 const FILE_TYPES = {
+  // PDF - already in PDF format, use as-is
+  pdf: new Set(['pdf']),
+
   // Images - supported by Sharp
   image: new Set([
     'jpg', 'jpeg', 'png', 'webp', 'gif', 'tiff', 'tif',
@@ -44,10 +47,11 @@ const FILE_TYPES = {
   ])
 };
 
-function getFileCategory(filename: string): 'image' | 'document' | 'video' | 'audio' | 'archive' | 'blocked' | 'unsupported' {
+function getFileCategory(filename: string): 'pdf' | 'image' | 'document' | 'video' | 'audio' | 'archive' | 'blocked' | 'unsupported' {
   const ext = path.extname(filename).slice(1).toLowerCase();
 
   if (FILE_TYPES.blocked.has(ext)) return 'blocked';
+  if (FILE_TYPES.pdf.has(ext)) return 'pdf';
   if (FILE_TYPES.image.has(ext)) return 'image';
   if (FILE_TYPES.document.has(ext)) return 'document';
   if (FILE_TYPES.video.has(ext)) return 'video';
@@ -218,37 +222,32 @@ async function generatePlaceholderPDF(fileName: string, fileSize: number, catego
        .fillColor('#333')
        .text('Forhåndsvisning ikke tilgjengelig', { align: 'center' });
 
-    doc.moveDown(2);
+    doc.moveDown(3);
 
-    // Icon/Box
-    doc.fontSize(48)
-       .fillColor('#999')
-       .text('📄', { align: 'center' });
-
-    doc.moveDown(2);
-
-    // File info
-    doc.fontSize(14)
-       .fillColor('#666')
-       .text('Filnavn:', { continued: false })
-       .fillColor('#333')
-       .text(fileName, { align: 'center' });
-
-    doc.moveDown(0.5);
+    // File info - labels and values on same line
+    const leftMargin = 100;
 
     doc.fontSize(14)
        .fillColor('#666')
-       .text('Filtype:', { continued: false })
+       .text('Filnavn:', leftMargin, doc.y, { continued: true })
        .fillColor('#333')
-       .text(category.toUpperCase(), { align: 'center' });
+       .text(' ' + fileName);
 
-    doc.moveDown(0.5);
+    doc.moveDown(1);
 
     doc.fontSize(14)
        .fillColor('#666')
-       .text('Størrelse:', { continued: false })
+       .text('Filtype:', leftMargin, doc.y, { continued: true })
        .fillColor('#333')
-       .text(`${(fileSize / 1024 / 1024).toFixed(2)} MB`, { align: 'center' });
+       .text(' ' + category.toUpperCase());
+
+    doc.moveDown(1);
+
+    doc.fontSize(14)
+       .fillColor('#666')
+       .text('Størrelse:', leftMargin, doc.y, { continued: true })
+       .fillColor('#333')
+       .text(' ' + `${(fileSize / 1024 / 1024).toFixed(2)} MB`);
 
     doc.moveDown(3);
 
@@ -277,7 +276,12 @@ async function convertFileToPDF(sourceFile: string, fileName: string, fileSize: 
   }
 
   // Handle based on category
-  if (category === 'image') {
+  if (category === 'pdf') {
+    // PDF files are already in the correct format - just copy them
+    console.log('PDF file detected - using as-is for preview');
+    copyFileSync(sourceFile, destinationFile);
+
+  } else if (category === 'image') {
     console.log('Converting image to PDF with Sharp');
 
     try {

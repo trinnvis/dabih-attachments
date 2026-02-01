@@ -3,7 +3,7 @@
 
 FROM node:22-bookworm AS base
 
-# Install LibreOffice, ClamAV and gosu
+# Install LibreOffice, ClamAV, supervisor and gosu
 RUN apt-get update && apt-get install -y \
     libreoffice-writer \
     libreoffice-calc \
@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     clamav \
     clamav-daemon \
     clamav-freshclam \
+    supervisor \
     gosu \
     && rm -rf /var/lib/apt/lists/*
 
@@ -51,9 +52,16 @@ RUN useradd -r -u 1001 -m -d /home/appuser -g daemon appuser && \
     mkdir -p /tmp/libreoffice /home/appuser/.cache /tmp/convert-test && \
     chown -R appuser:daemon /tmp/libreoffice /home/appuser /tmp/convert-test
 
-# Copy and set up entrypoint script
+# Copy supervisor config
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Create supervisor log directory
+RUN mkdir -p /var/log/supervisor
+
+# Copy and set up scripts
 COPY docker-entrypoint.sh /usr/local/bin/
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+COPY start-app.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh /usr/local/bin/start-app.sh
 
 # Expose port
 EXPOSE 3000
